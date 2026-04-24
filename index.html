@@ -431,17 +431,24 @@
 
     <!-- ===== FRIENDS ===== -->
     <section id="friends" class="screen">
-        <div class="section-title">フレンド</div>
-        <div class="qr-row">
-            <button class="qr-btn" onclick="showMyQRCode()">📱 QRを見せる</button>
-            <button class="qr-btn" onclick="startScanner()">🔍 読み取る</button>
-            <button class="qr-btn" onclick="searchFriendById()">🔍 IDで検索</button>
+    <div class="screen-header">
+        <h2 class="syne">フレンド</h2>
+    </div>
+
+    <div class="qr-row" style="display: flex; gap: 10px; margin-bottom: 20px;">
+        <button class="qr-btn" onclick="showMyQRCode()">📱 QRを見せる</button>
+        <button class="qr-btn" onclick="startScanner()">🔍 読み取る</button>
+        <button class="qr-btn" onclick="searchFriendById()">🔍 IDで検索</button>
+    </div>
+    
+    <div id="friend-requests-list" style="margin-top: 10px; min-height: 20px;">
         </div>
-        <div class="empty-state" style="height:200px;">
-            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:36px;height:36px;opacity:0.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            <span style="color:var(--gray);font-size:13px;">QRコードでフレンドを追加しよう</span>
-        </div>
-    </section>
+
+    <div class="empty-state" id="friends-empty-view">
+        <div class="empty-icon">👥</div>
+        <p>フレンドを検索して追加しよう</p>
+    </div>
+</section>
 
     <!-- ===== RECORD ===== -->
     <section id="record" class="screen">
@@ -629,20 +636,52 @@ function closeSplash() {
     // ===== HOME FEED =====
     const NAMES = ['さくら','ひな','れい','まお','ゆか','みさき','あい','りか'];
 
-    async function loadVoices() {
-        if (bounceAnim) { cancelAnimationFrame(bounceAnim); bounceCards = []; }
-        const feed = document.getElementById('feed-area');
-        feed.innerHTML = '<div class="empty-state"><svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:40px;height:40px;opacity:0.3"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg><span>まだ投稿がありません</span></div>';
-        try {
-            const tenHoursAgo = new Date(Date.now() - 10*60*60*1000).toISOString();
-            const { data: posts } = await sb.from(TABLE).select('*').gt('created_at', tenHoursAgo).order('created_at', { ascending: false });
-            if (!posts || posts.length === 0) return;
-            feed.innerHTML = '';
-            if (currentLayout === 0) renderFloat(feed, posts);
-            else if (currentLayout === 1) renderStar(feed, posts);
-            else renderBounce(feed, posts);
-        } catch(e) { console.error(e); }
+    async function loadFriendRequests() {
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return;
+
+    // 自分宛て（friend_id が自分のID）の申請を取得
+    const { data: requests, error } = await sb.from('friends')
+        .select('*')
+        .eq('friend_id', user.id)
+        .eq('status', 'pending');
+
+    const container = document.getElementById('friend-requests-list');
+    if (!container) return;
+    container.innerHTML = "";
+
+    if (requests && requests.length > 0) {
+        requests.forEach(req => {
+            const div = document.createElement('div');
+            div.style = "background: rgba(255,255,255,0.1); padding: 15px; border-radius: 12px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center;";
+            div.innerHTML = `
+                <div>
+                    <div style="font-size: 12px; color: #aaa;">フレンド申請が届いています</div>
+                    <div style="font-weight: bold;">${req.sender_name} さん</div>
+                </div>
+                <button onclick="acceptFriend('${req.id}')" style="background: #ff2d55; color: white; border: none; padding: 8px 15px; border-radius: 20px; font-size: 12px;">許可する</button>
+            `;
+            container.appendChild(div);
+        });
     }
+}
+
+// 許可ボタンを押した時の処理
+async function acceptFriend(requestId) {
+    const { error } = await sb.from('friends')
+        .update({ status: 'accepted' })
+        .eq('id', requestId);
+
+    if (error) {
+        alert("エラーが発生しました");
+    } else {
+        alert("フレンドになりました！");
+        loadFriendRequests(); // リストを更新
+    }
+}
+
+// フレンド画面を表示した時にリストを読み込むようにする
+// showScreen('friends') が呼ばれた時に loadFriendRequests() を実行するように調整してください
 
     function makeCard(post, idx) {
         const { data: u } = sb.storage.from(BUCKET).getPublicUrl(post.audio_url);
@@ -944,16 +983,33 @@ function closeSplash() {
         return;
     }
 
-    // Supabaseの 'friends' テーブルに申請を保存する例
-    // ※あらかじめテーブルに user_id と friend_id カラムが必要です
+    // 自分の登録名を取得（なければIDの一部などを名前にする）
+    const myName = prompt("相手に表示されるあなたの名前を入力してください", "匿名ユーザー");
+
+    // 送信前に既に申請がないか確認する
+    const { data: existing } = await sb.from('friends')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('friend_id', friendId);
+
+    if (existing && existing.length > 0) {
+        alert("この相手には既に申請済みです");
+        return;
+    }
+
     const { error } = await sb.from('friends').insert([
-        { user_id: user.id, friend_id: friendId, status: 'pending' }
+        { 
+            user_id: user.id, 
+            friend_id: friendId, 
+            sender_name: myName, // 名前を保存
+            status: 'pending' 
+        }
     ]);
 
     if (error) {
-        alert("エラー: IDが正しくないか、既に申請済みです");
+        alert("エラーが発生しました: " + error.message);
     } else {
-        alert("フレンド申請を送りました！");
+        alert(`${friendId} さんにフレンド申請を送りました！`);
     }
 }
 </script>
