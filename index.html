@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+    <script src="https://cdn.jsdeliver.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>声の瞬間 | Voice Moment</title>
@@ -433,7 +434,8 @@
         <div class="section-title">フレンド</div>
         <div class="qr-row">
             <button class="qr-btn" onclick="showMyQRCode()">📱 QRを見せる</button>
-            <button class="qr-btn">🔍 読み取る</button>
+            <button class="qr-btn" onclick="startScanner()">🔍 読み取る</button>
+            <button class="qr-btn" onclick="searchFriendById()">🔍 IDで検索</button>
         </div>
         <div class="empty-state" style="height:200px;">
             <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:36px;height:36px;opacity:0.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -585,26 +587,26 @@
     }
 
     // 起動時にログイン状態チェック
-    async function checkAuth() {
-        const { data: { session } } = await sb.auth.getSession();
-        if (session) {
-            const username = session.user.email.split('@')[0];
-            document.getElementById('disp-username').textContent = '@' + username;
-            enterApp();
-        }
-        // 未ログインならauth-screenがそのまま表示される
+    async function checkUser() {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+        if (typeof enterApp === 'function') enterApp();
+    } else {
+        showScreen('auth-screen');
     }
+}
 
-    // ===== SPLASH =====
-    function closeSplash() {
-        const s = document.getElementById('splash');
-        s.style.transition = '0.6s';
-        s.style.opacity = '0';
+// 既存の closeSplash があれば、中身に checkUser(); を足してください
+function closeSplash() {
+    const splash = document.getElementById('splash-screen');
+    if(splash) {
+        splash.style.opacity = '0';
         setTimeout(() => {
-            s.style.display = 'none';
-            checkAuth();
-        }, 600);
+            splash.style.display = 'none';
+            checkUser(); // ここで呼び出す
+        }, 500);
     }
+}
 
     // ===== SCREEN =====
     function showScreen(id, el) {
@@ -849,41 +851,111 @@
     // splashタップ→closeSplash→checkAuth→ログイン済みならenterApp、未ログインならauth-screen表示
 
     async function showMyQRCode() {
-        const { data: { user } } = await sb.auth.getUser();
-        if (!user) { alert('ログインが必要です'); return; }
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) { alert('ログインが必要です'); return; }
 
-        //すでに表示されている場合は消す
-        const oldQr = document.getElementById('qr-modal');
-        if (oldQr) oldQr.remove();
+    const oldQr = document.getElementById('qr-modal');
+    if (oldQr) oldQr.remove();
 
-        // QRを表示する画面(モーダル)を作成
-        const modal = document.createElement('div');
-        modal.id = 'qr-modal';
-        modal.style = `
-        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-        background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
-        align-items: center; justify-content: center; z-index: 1000;
-        `;
-
-        modal.innerHTML = `
-        <div style="background: white; padding: 20px; border-radius: 15px; display: flex-direction: column; align-items: center;">
+    const modal = document.createElement('div');
+    modal.id = 'qr-modal';
+    modal.style = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:1000;";
+    
+    modal.innerHTML = `
+        <div style="background: white; padding: 20px; border-radius: 15px; display: flex; flex-direction: column; align-items: center; width: 80%; max-width: 300px;">
             <div id="qrcode-canvas"></div>
-            <p style="color: black; margin-top: 15px; font-weight: bold;">あなたのフレンド用QR</p>
-            <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 15px; padding: 10px 20px; background: #ff2d55; color: white; border: none; border-radius: 20px;">閉じる</button>
+            <p style="color: black; margin-top: 15px; font-weight: bold; font-size: 12px;">マイID (タップでコピー)</p>
+            <div onclick="navigator.clipboard.writeText('${user.id}'); alert('IDをコピーしました')" 
+                 style="background: #eee; color: #333; padding: 10px; border-radius: 5px; font-size: 10px; word-break: break-all; cursor: pointer; margin-top: 5px; width: 100%; text-align: center;">
+                ${user.id}
             </div>
-            `;
+            <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 20px; padding: 10px 20px; background: #ff2d55; color: white; border: none; border-radius: 20px; width: 100%;">閉じる</button>
+        </div>
+    `;
+    document.body.appendChild(modal);
 
-            document.body.appendChild(modal);
+    new QRCode(document.getElementById("qrcode-canvas"), {
+        text: user.id, width: 180, height: 180
+    });
+}
 
-            // QRコードを生成
-            new QRCode(document.getElementById("qrcode-canvas"), {
-                text: user.id,
-                width: 180,
-                height: 180,
-                colorDark : "#000000",
-                colorLight : "#ffffff"
-            });
+    async function strtScanner() {
+        const video = document.createElement("video");
+        const canvasElement = document.createElement("canvas");
+        const canvas = canvasElement.getContext("2d");
+
+        // スキャナー用の全画面表示
+        const scannerOverlay = document.createElement("div");
+        scannerOverlay.style = "position:fixed; top0; left:0; width:100$; height; background:black; z-index:2000; display:flex; flex-direction:column; align-items:center; justify-content:center;";
+        scannerOverlay.innerHTML = `
+        <p style="color:white; margin-bottom:20px;">QRコードを枠に合わせてください</p>
+        <div id="video-container" style="width:80%; aspect-ration:1/1; overflow:hidden; border:2px solid #ff2d55; position:relative; border:none;>キャンセル</button>
+            <button id="stop-scan-btn" style="margin-top:30px; padding:10px 30px; background:white; color:black; border-radius:20px; border:none;">キャンセル</button>
+        `;
+        document.body.appendChiled(scannerOverlay);
+        document.getElementById("video-container").appedChiled(video);
+
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        video,srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.play();
+        
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA) {
+                canvasElement.height = video.videoHeight;
+                canvasElement.width = video.videoWidth;
+                canvas.drawImage(video, 0, 0, canvasElement.width, canvasElement.height);
+                const imageData = canvas.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                const code = jsQR(imageData, imageData.width, imageData.height, { inversionAttempts: "dontInvert"});
+
+                if (code) {
+                    // QRコード(ユーザーID)を読み取った時の処理
+                    alert("フレンドIDを読み取りました: " + code.data);
+                    addFriend(code.data); //後で友達登録用関数を作る
+                    stopScan();
+                    return;
+                }
+            }
+            if (scannerOverlay.parentNode) requestAnimationFrame(tick);
+        }
+
+        function stopScan() {
+            stream.getTracks().forEach(track => track.stop());
+            scannerOverlay.remove();
+        }
+
+        document.getElementById("stop-scan-btn").onclick = stopScan;
+        requestAnnimationFrame(tick);
     }
+
+    // 友達登録処理
+    async function addFriend(friendId) {
+        const { data: { user } } = await sb.auth.getUser();
+        console.log("自分:", user.id, "相手:", friendId);
+    }
+
+    async function searchFriendById() {
+    const friendId = prompt("フレンドのIDを入力してください");
+    if (!friendId) return;
+
+    const { data: { user } } = await sb.auth.getUser();
+    if (friendId === user.id) {
+        alert("自分のIDは登録できません");
+        return;
+    }
+
+    // Supabaseの 'friends' テーブルに申請を保存する例
+    // ※あらかじめテーブルに user_id と friend_id カラムが必要です
+    const { error } = await sb.from('friends').insert([
+        { user_id: user.id, friend_id: friendId, status: 'pending' }
+    ]);
+
+    if (error) {
+        alert("エラー: IDが正しくないか、既に申請済みです");
+    } else {
+        alert("フレンド申請を送りました！");
+    }
+}
 </script>
 </body>
 </html>
