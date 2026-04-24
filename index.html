@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>声の瞬間 | Voice Moment</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0c0c12;
+            --card: rgba(255,255,255,0.05);
+            --border: rgba(255,255,255,0.1);
+            --white: #ffffff;
+            --gray: #888981;
+            --accent: #fb8fb1;
+            --red: #ff2d55;
+            --nav-h: 70px;
+        }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #000;
+            color: var(--white);
+            display: flex;
+            justify-content: center;
+            overflow: hidden;
+            height: 100vh;
+        }
+        #app {
+            width: 100%;
+            max-width: 390px;
+            height: 100vh;
+            background: var(--bg);
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* ===== AUTH ===== */
+        #auth-screen {
+            position: absolute;
+            inset: 0;
+            z-index: 300;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 30px;
+            gap: 12px;
+        }
+        .auth-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+        .auth-sub {
+            font-size: 13px;
+            color: var(--gray);
+            letter-spacing: 0.05em;
+            margin-bottom: 20px;
+        }
+        .auth-input {
+            width: 100%;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 15px 16px;
+            color: #fff;
+            font-size: 15px;
+            font-family: 'DM Sans', sans-serif;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .auth-input:focus { border-color: rgba(255,255,255,0.3); }
+        .auth-btn-primary {
+            width: 100%;
+            padding: 15px;
+            background: var(--white);
+            color: #000;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+        .auth-btn-secondary {
+            width: 100%;
+            padding: 15px;
+            background: transparent;
+            color: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            font-size: 15px;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer;
+        }
+        .auth-msg {
+            font-size: 13px;
+            min-height: 20px;
+            text-align: center;
+            color: var(--accent);
+        }
+
+        /* ===== SPLASH ===== */
+        #splash {
+            position: absolute;
+            inset: 0;
+            z-index: 200;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 32px;
+            cursor: pointer;
+        }
+        .splash-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            opacity: 0;
+            animation: splashIn 1.2s 0.3s forwards;
+        }
+        .splash-sub {
+            font-size: 0.85rem;
+            color: #444;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            opacity: 0;
+            animation: splashIn 1.2s 0.7s forwards;
+        }
+        .splash-ring {
+            width: 70px; height: 70px;
+            border: 2px solid rgba(255,255,255,0.15);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 2s linear infinite, splashIn 1s 0.5s forwards;
+            opacity: 0;
+        }
+        @keyframes splashIn { to { opacity: 1; } }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ===== SCREEN ===== */
+        .screen {
+            display: none;
+            position: absolute;
+            inset: 0;
+            padding: 0 0 var(--nav-h);
+            overflow-y: auto;
+            animation: screenIn 0.35s ease;
+        }
+        .screen.active { display: block; }
+        @keyframes screenIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== NAV ===== */
+        nav {
+            position: absolute;
+            bottom: 0; left: 0; right: 0;
+            height: var(--nav-h);
+            background: rgba(8,8,8,0.95);
+            backdrop-filter: blur(20px);
+            border-top: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-around;
+            z-index: 100;
+        }
+        .nav-btn {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--gray);
+            cursor: pointer;
+            transition: color 0.2s;
+            font-size: 10px;
+            letter-spacing: 0.05em;
+        }
+        .nav-btn svg { width: 22px; height: 22px; }
+        .nav-btn.active { color: var(--white); }
+        .nav-center {
+            width: 52px; height: 52px;
+            background: var(--white);
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 0 20px rgba(255,255,255,0.15);
+            transition: transform 0.2s;
+        }
+        .nav-center:active { transform: scale(0.93); }
+        .nav-center svg { color: #000; width: 24px; height: 24px; }
+
+        /* ===== HOME ===== */
+        #home-header {
+            padding: 20px 20px 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .app-title {
+            font-family: 'Syne', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+        }
+        .layout-tabs {
+            display: flex;
+            gap: 6px;
+            padding: 12px 20px;
+        }
+        .layout-tab {
+            flex: 1;
+            padding: 7px 0;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            font-size: 11px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--gray);
+            transition: all 0.2s;
+        }
+        .layout-tab.active {
+            background: var(--white);
+            color: #000;
+            border-color: var(--white);
+            font-weight: 500;
+        }
+        #feed-area {
+            position: relative;
+            height: calc(100vh - var(--nav-h) - 130px);
+            overflow: hidden;
+        }
+
+        /* layout cards */
+        .bubble-card {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 86%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            backdrop-filter: blur(15px);
+        }
+        .bubble-card.float {
+            animation: floatBubble var(--dur,18s) linear var(--delay,0s) forwards;
+        }
+        @keyframes floatBubble {
+            0%   { bottom: -90px; opacity: 0; }
+            8%   { opacity: 1; }
+            88%  { opacity: 1; }
+            100% { bottom: 105%; opacity: 0; }
+        }
+        .star-card {
+            position: absolute;
+            width: 82%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            backdrop-filter: blur(15px);
+        }
+        .star-card.shoot {
+            animation: shootStar var(--dur,3s) linear var(--delay,0s) forwards;
+        }
+        @keyframes shootStar {
+            0%   { top: -60px; left: var(--startX,10%); opacity: 0; }
+            6%   { opacity: 1; }
+            94%  { opacity: 1; }
+            100% { top: 110%; left: calc(var(--startX,10%) + var(--drift,20px)); opacity: 0; }
+        }
+        .bounce-card {
+            position: absolute;
+            width: 70%;
+            background: var(--card);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 16px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            backdrop-filter: blur(15px);
+            transition: border-color 0.1s;
+        }
+        .bounce-card.hit { border-color: rgba(255,255,255,0.4); }
+
+        .wave { display: flex; gap: 2px; align-items: center; height: 28px; flex-shrink: 0; }
+        .wave span {
+            width: 2.5px; border-radius: 2px; background: var(--white);
+            animation: wv 0.9s ease-in-out infinite;
+        }
+        .wave span:nth-child(1) { animation-delay: 0s; }
+        .wave span:nth-child(2) { animation-delay: 0.15s; }
+        .wave span:nth-child(3) { animation-delay: 0.3s; }
+        .wave span:nth-child(4) { animation-delay: 0.45s; }
+        .wave span:nth-child(5) { animation-delay: 0.6s; }
+        @keyframes wv { 0%,100% { height: 5px; } 50% { height: 22px; } }
+
+        .card-info { flex: 1; }
+        .card-name { font-size: 13px; font-weight: 500; }
+        .card-time { font-size: 11px; color: var(--gray); margin-top: 2px; }
+        .play-btn {
+            background: var(--white); color: #000; border: none;
+            border-radius: 20px; padding: 7px 14px; font-size: 11px;
+            font-weight: 600; cursor: pointer; flex-shrink: 0;
+            font-family: 'DM Sans', sans-serif;
+        }
+
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 100%; color: var(--gray);
+            gap: 10px; font-size: 14px;
+        }
+        .empty-state svg { width: 40px; height: 40px; opacity: 0.3; }
+
+        /* ===== RECORD ===== */
+        #record {
+            display: none; position: absolute; inset: 0;
+            padding-bottom: var(--nav-h);
+            align-items: center; justify-content: center;
+            flex-direction: column; gap: 0;
+        }
+        #record.active { display: flex; }
+        .rec-label { font-size: 13px; color: var(--gray); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+        .rec-copy { font-family: 'Syne', sans-serif; font-size: 1.25rem; font-weight: 700; text-align: center; padding: 0 30px; line-height: 1.3; margin-bottom: 32px; }
+        .notif-badge {
+            display: inline-block; background: var(--red); color: #fff;
+            font-size: 10px; font-weight: 600; padding: 3px 10px;
+            border-radius: 20px; letter-spacing: 0.05em; text-transform: uppercase;
+            margin-bottom: 16px; animation: badgePulse 2s ease-in-out infinite;
+        }
+        @keyframes badgePulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(255,45,85,0.4); }
+            50% { box-shadow: 0 0 0 8px rgba(255,45,85,0); }
+        }
+        .mic-outer {
+            width: 160px; height: 160px; border-radius: 50%;
+            background: linear-gradient(145deg,#ffffff,#e6e6e6);
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; box-shadow: 0 0 40px rgba(255,255,255,0.12);
+            transition: transform 0.15s, background 0.2s;
+            margin: 24px 0; position: relative;
+        }
+        .mic-outer.recording { background: var(--red); animation: recPulse 1s ease-in-out infinite; }
+        @keyframes recPulse {
+            0%,100% { box-shadow: 0 0 0 0 rgba(255,45,85,0.5); }
+            50% { box-shadow: 0 0 0 24px rgba(255,45,85,0); }
+        }
+        .mic-outer svg { width: 64px; height: 64px; }
+        .mic-outer.recording svg { color: #fff; }
+        .rec-timer { font-family: 'Syne', sans-serif; font-size: 3rem; font-weight: 700; letter-spacing: -0.04em; min-height: 56px; }
+        .rec-limit { font-size: 13px; color: var(--gray); margin-top: 4px; }
+        .live-wave { display: flex; gap: 3px; align-items: center; height: 40px; margin: 16px 0; opacity: 0; transition: opacity 0.3s; }
+        .live-wave.show { opacity: 1; }
+        .live-wave span { width: 3px; border-radius: 3px; background: var(--red); height: 6px; animation: liveWv 0.6s ease-in-out infinite; }
+        @keyframes liveWv { 0%,100% { height: 4px; } 50% { height: var(--h,20px); } }
+        .post-type-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 20px; }
+        .type-chip { border: 1px solid var(--border); padding: 8px 18px; border-radius: 30px; font-size: 13px; cursor: pointer; color: var(--gray); transition: all 0.2s; }
+        .type-chip.selected { background: var(--white); color: #000; border-color: var(--white); font-weight: 500; }
+        .post-action-btn { background: var(--white); color: #000; border: none; border-radius: 30px; padding: 15px 60px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; }
+        .fx-row { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-bottom: 16px; }
+        .fx-chip { border: 1px solid var(--border); padding: 6px 14px; border-radius: 20px; font-size: 12px; cursor: pointer; color: var(--gray); transition: all 0.2s; }
+        .fx-chip.active { background: rgba(255,45,85,0.15); border-color: var(--red); color: var(--red); }
+
+        /* ===== OTHER SCREENS ===== */
+        #friends, #dm, #settings { padding: 20px; }
+        .section-title { font-family: 'Syne', sans-serif; font-size: 1.4rem; font-weight: 800; margin-bottom: 20px; }
+        .qr-row { display: flex; gap: 10px; margin-bottom: 28px; }
+        .qr-btn { flex: 1; padding: 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--border); color: var(--white); font-size: 13px; font-family: 'DM Sans', sans-serif; cursor: pointer; }
+        .settings-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .settings-row span:last-child { color: var(--gray); font-size: 13px; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+<div id="app">
+
+    <!-- ===== AUTH SCREEN ===== -->
+    <div id="auth-screen">
+        <div class="auth-title">声の瞬間</div>
+        <div class="auth-sub">声を、一瞬だけ分かち合う</div>
+        <input type="email" id="auth-email" class="auth-input" placeholder="メールアドレス">
+        <input type="password" id="auth-password" class="auth-input" placeholder="パスワード（6文字以上）">
+        <div id="auth-msg" class="auth-msg"></div>
+        <button class="auth-btn-primary" onclick="handleAuth('login')">ログイン</button>
+        <button class="auth-btn-secondary" onclick="handleAuth('signup')">新規登録</button>
+    </div>
+
+    <!-- ===== SPLASH ===== -->
+    <div id="splash" onclick="closeSplash()">
+        <div class="splash-ring"></div>
+        <div class="splash-title">声の瞬間</div>
+        <div class="splash-sub">tap to enter</div>
+    </div>
+
+    <!-- ===== HOME ===== -->
+    <section id="home" class="screen active">
+        <div id="home-header">
+            <div class="app-title">声の瞬間</div>
+            <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </div>
+        <div class="layout-tabs">
+            <div class="layout-tab active" onclick="setLayout(0,this)">🎈 風船</div>
+            <div class="layout-tab" onclick="setLayout(1,this)">🌠 流れ星</div>
+            <div class="layout-tab" onclick="setLayout(2,this)">⚡ 跳ね返り</div>
+        </div>
+        <div id="feed-area">
+            <div class="empty-state" id="empty-home">
+                <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg>
+                <span>まだ投稿がありません</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FRIENDS ===== -->
+    <section id="friends" class="screen">
+        <div class="section-title">フレンド</div>
+        <div class="qr-row">
+            <button class="qr-btn" onclick="showMyQRCode()">📱 QRを見せる</button>
+            <button class="qr-btn">🔍 読み取る</button>
+        </div>
+        <div class="empty-state" style="height:200px;">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:36px;height:36px;opacity:0.3"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span style="color:var(--gray);font-size:13px;">QRコードでフレンドを追加しよう</span>
+        </div>
+    </section>
+
+    <!-- ===== RECORD ===== -->
+    <section id="record" class="screen">
+        <div class="rec-label">Voice Moment</div>
+        <div id="rec-copy" class="rec-copy">今この瞬間の<br>声を届けよう</div>
+        <div id="notif-badge" class="notif-badge hidden">🔔 通知が来ました</div>
+        <div class="live-wave" id="live-wave">
+            <span style="--h:8px"></span><span style="--h:18px"></span>
+            <span style="--h:28px"></span><span style="--h:22px"></span>
+            <span style="--h:14px"></span><span style="--h:30px"></span>
+            <span style="--h:10px"></span><span style="--h:24px"></span>
+        </div>
+        <div id="mic-outer" class="mic-outer" onmousedown="startRec()" onmouseup="stopRec()" ontouchstart="startRec(event)" ontouchend="stopRec()">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/>
+            </svg>
+        </div>
+        <div class="rec-timer" id="rec-timer"></div>
+        <div class="rec-limit" id="rec-limit">長押しで録音</div>
+        <div style="font-size:12px;color:var(--gray);margin:16px 0 8px;letter-spacing:0.05em;">声エフェクト</div>
+        <div class="fx-row">
+            <div class="fx-chip active" onclick="setFX(this,'normal')">なし</div>
+            <div class="fx-chip" onclick="setFX(this,'helium')">🎈 ヘリウム</div>
+            <div class="fx-chip" onclick="setFX(this,'deep')">👾 ディープ</div>
+            <div class="fx-chip" onclick="setFX(this,'robot')">🤖 ロボット</div>
+            <div class="fx-chip" onclick="setFX(this,'echo')">🌊 エコー</div>
+        </div>
+        <div id="post-area" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%">
+            <div class="post-type-row">
+                <div class="type-chip selected" onclick="selectType(this)">おはよう</div>
+                <div class="type-chip" onclick="selectType(this)">今この瞬間</div>
+                <div class="type-chip" onclick="selectType(this)">おやすみ</div>
+            </div>
+            <button class="post-action-btn" onclick="postVoice()">投稿する</button>
+            <div style="font-size:12px;color:var(--gray);cursor:pointer;" onclick="resetRec()">やり直す</div>
+        </div>
+    </section>
+
+    <!-- ===== DM ===== -->
+    <section id="dm" class="screen">
+        <div class="section-title">DM</div>
+        <div class="empty-state" style="height:300px;">
+            <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:36px;height:36px;opacity:0.3"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            <span style="color:var(--gray);font-size:13px;">まだDMはありません</span>
+        </div>
+    </section>
+
+    <!-- ===== SETTINGS ===== -->
+    <section id="settings" class="screen">
+        <div class="section-title">設定</div>
+        <div class="settings-row"><span>ユーザー名</span><span id="disp-username">@user</span></div>
+        <div class="settings-row"><span>朝の通知時間帯</span><span>06:00 - 07:00</span></div>
+        <div class="settings-row"><span>夜の通知時間帯</span><span>21:00 - 22:00</span></div>
+        <div class="settings-row"><span>ランダム通知</span><span>1日2回</span></div>
+        <div class="settings-row"><span>言語</span><span>日本語</span></div>
+        <div class="settings-row"><span>プレミアムプラン</span><span>月額400円</span></div>
+        <div style="margin-top:32px;color:var(--red);font-size:14px;cursor:pointer;text-align:center;" onclick="authLogout()">ログアウト</div>
+    </section>
+
+    <!-- ===== NAV ===== -->
+    <nav>
+        <div class="nav-btn active" id="nav-home" onclick="showScreen('home',this)">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            ホーム
+        </div>
+        <div class="nav-btn" id="nav-friends" onclick="showScreen('friends',this)">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            フレンド
+        </div>
+        <div class="nav-center" onclick="showScreen('record',document.getElementById('nav-rec'))">
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/></svg>
+        </div>
+        <div class="nav-btn" id="nav-dm" onclick="showScreen('dm',this)">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+            DM
+        </div>
+        <div class="nav-btn" id="nav-settings" onclick="showScreen('settings',this)">
+            <svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            設定
+        </div>
+        <div class="nav-btn hidden" id="nav-rec"></div>
+    </nav>
+</div>
+
+<script>
+    // ===== Supabase =====
+    const { createClient } = window.supabase;
+    const sb = createClient(
+        'https://ivsogzwizgfdmxlszugk.supabase.co',
+        'sb_publishable_kjJ8DZlKSCPOrMKLqCE8NA_RHSbkNcT'
+    );
+    const TABLE = 'voice_posts';
+    const BUCKET = 'recordings';
+
+    // ===== AUTH =====
+    async function handleAuth(type) {
+        const email = document.getElementById('auth-email').value.trim();
+        const password = document.getElementById('auth-password').value;
+        const msg = document.getElementById('auth-msg');
+
+        if (!email || !password) { msg.textContent = 'メールとパスワードを入力してください'; return; }
+        if (password.length < 6) { msg.textContent = 'パスワードは6文字以上にしてください'; return; }
+
+        msg.style.color = 'var(--accent)';
+        msg.textContent = '通信中...';
+
+        if (type === 'signup') {
+            const { error } = await sb.auth.signUp({ email, password });
+            if (error) {
+                msg.style.color = 'var(--red)';
+                msg.textContent = 'エラー: ' + error.message;
+            } else {
+                msg.style.color = '#4caf50';
+                msg.textContent = '登録完了！メールを確認してください（届かない場合はSupabaseでConfirm emailをOFFにしてください）';
+            }
+        } else {
+            const { data, error } = await sb.auth.signInWithPassword({ email, password });
+            if (error) {
+                msg.style.color = 'var(--red)';
+                msg.textContent = 'エラー: ' + error.message;
+            } else {
+                msg.style.color = '#4caf50';
+                msg.textContent = 'ログイン成功！';
+                const username = data.user.email.split('@')[0];
+                document.getElementById('disp-username').textContent = '@' + username;
+                setTimeout(() => enterApp(), 800);
+            }
+        }
+    }
+
+    function enterApp() {
+        document.getElementById('auth-screen').style.display = 'none';
+        document.getElementById('splash').style.display = 'none';
+        showScreen('home', document.getElementById('nav-home'));
+        loadVoices();
+    }
+
+    async function authLogout() {
+        await sb.auth.signOut();
+        document.getElementById('auth-screen').style.display = 'flex';
+        document.getElementById('auth-msg').textContent = '';
+    }
+
+    // 起動時にログイン状態チェック
+    async function checkAuth() {
+        const { data: { session } } = await sb.auth.getSession();
+        if (session) {
+            const username = session.user.email.split('@')[0];
+            document.getElementById('disp-username').textContent = '@' + username;
+            enterApp();
+        }
+        // 未ログインならauth-screenがそのまま表示される
+    }
+
+    // ===== SPLASH =====
+    function closeSplash() {
+        const s = document.getElementById('splash');
+        s.style.transition = '0.6s';
+        s.style.opacity = '0';
+        setTimeout(() => {
+            s.style.display = 'none';
+            checkAuth();
+        }, 600);
+    }
+
+    // ===== SCREEN =====
+    function showScreen(id, el) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        document.querySelectorAll('.nav-btn').forEach(n => n.classList.remove('active'));
+        if (el && el.classList && el.classList.contains('nav-btn')) el.classList.add('active');
+        if (id === 'home') loadVoices();
+    }
+
+    // ===== LAYOUT =====
+    let currentLayout = 0, bounceCards = [], bounceAnim;
+    function setLayout(idx, el) {
+        currentLayout = idx;
+        document.querySelectorAll('.layout-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        loadVoices();
+    }
+
+    // ===== HOME FEED =====
+    const NAMES = ['さくら','ひな','れい','まお','ゆか','みさき','あい','りか'];
+
+    async function loadVoices() {
+        if (bounceAnim) { cancelAnimationFrame(bounceAnim); bounceCards = []; }
+        const feed = document.getElementById('feed-area');
+        feed.innerHTML = '<div class="empty-state"><svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24" style="width:40px;height:40px;opacity:0.3"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8"/></svg><span>まだ投稿がありません</span></div>';
+        try {
+            const tenHoursAgo = new Date(Date.now() - 10*60*60*1000).toISOString();
+            const { data: posts } = await sb.from(TABLE).select('*').gt('created_at', tenHoursAgo).order('created_at', { ascending: false });
+            if (!posts || posts.length === 0) return;
+            feed.innerHTML = '';
+            if (currentLayout === 0) renderFloat(feed, posts);
+            else if (currentLayout === 1) renderStar(feed, posts);
+            else renderBounce(feed, posts);
+        } catch(e) { console.error(e); }
+    }
+
+    function makeCard(post, idx) {
+        const { data: u } = sb.storage.from(BUCKET).getPublicUrl(post.audio_url);
+        const name = NAMES[idx % NAMES.length];
+        const mins = Math.floor((Date.now() - new Date(post.created_at)) / 60000);
+        const timeStr = mins < 1 ? 'たった今' : mins < 60 ? `${mins}分前` : `${Math.floor(mins/60)}時間前`;
+        return { url: u.publicUrl, name, timeStr };
+    }
+
+    function cardInner(name, timeStr, url) {
+        return `<div class="wave"><span></span><span></span><span></span><span></span><span></span></div>
+        <div class="card-info"><div class="card-name">${name}</div><div class="card-time">${timeStr}</div></div>
+        <button class="play-btn" onclick="playVoice('${url}',this)">▶</button>`;
+    }
+
+    function renderFloat(feed, posts) {
+        posts.forEach((post, i) => {
+            const { url, name, timeStr } = makeCard(post, i);
+            const el = document.createElement('div');
+            el.className = 'bubble-card float';
+            el.style.setProperty('--dur', `${16+Math.random()*8}s`);
+            el.style.setProperty('--delay', `${i*2.5}s`);
+            el.innerHTML = cardInner(name, timeStr, url);
+            feed.appendChild(el);
+            el.addEventListener('animationend', () => el.remove());
+        });
+    }
+
+    function renderStar(feed, posts) {
+        posts.forEach((post, i) => {
+            const { url, name, timeStr } = makeCard(post, i);
+            const el = document.createElement('div');
+            el.className = 'star-card shoot';
+            const startX = Math.random()*40;
+            el.style.setProperty('--dur', `${2.5+Math.random()*2}s`);
+            el.style.setProperty('--delay', `${i*1.8}s`);
+            el.style.setProperty('--startX', startX+'%');
+            el.style.setProperty('--drift', ((Math.random()-0.5)*60)+'px');
+            el.style.left = startX+'%';
+            el.innerHTML = cardInner(name, timeStr, url);
+            feed.appendChild(el);
+            el.addEventListener('animationend', () => el.remove());
+        });
+    }
+
+    function renderBounce(feed, posts) {
+        bounceCards = [];
+        const W = feed.clientWidth, H = feed.clientHeight;
+        posts.slice(0,5).forEach((post, i) => {
+            const { url, name, timeStr } = makeCard(post, i);
+            const el = document.createElement('div');
+            el.className = 'bounce-card';
+            el.innerHTML = cardInner(name, timeStr, url);
+            feed.appendChild(el);
+            const cw = el.offsetWidth||220, ch = el.offsetHeight||60;
+            bounceCards.push({ el, cw, ch,
+                x: Math.random()*(W-cw), y: Math.random()*(H-ch),
+                vx: (Math.random()>0.5?1:-1)*(1.2+Math.random()),
+                vy: (Math.random()>0.5?1:-1)*(0.8+Math.random())
+            });
+        });
+        animateBounce(feed);
+    }
+
+    function animateBounce(feed) {
+        const W = feed.clientWidth, H = feed.clientHeight;
+        bounceCards.forEach(c => {
+            c.x += c.vx; c.y += c.vy;
+            if (c.x<=0||c.x+c.cw>=W) { c.vx*=-1; c.x=Math.max(0,Math.min(c.x,W-c.cw)); flashHit(c.el); }
+            if (c.y<=0||c.y+c.ch>=H) { c.vy*=-1; c.y=Math.max(0,Math.min(c.y,H-c.ch)); flashHit(c.el); }
+        });
+        for (let i=0;i<bounceCards.length;i++) for (let j=i+1;j<bounceCards.length;j++) {
+            const a=bounceCards[i], b=bounceCards[j];
+            const dx=(a.x+a.cw/2)-(b.x+b.cw/2), dy=(a.y+a.ch/2)-(b.y+b.ch/2);
+            if (Math.sqrt(dx*dx+dy*dy) < (a.cw+b.cw)/2.5) {
+                [a.vx,b.vx]=[b.vx,a.vx]; [a.vy,b.vy]=[b.vy,a.vy];
+                flashHit(a.el); flashHit(b.el);
+            }
+        }
+        bounceCards.forEach(c => { c.el.style.left=c.x+'px'; c.el.style.top=c.y+'px'; });
+        bounceAnim = requestAnimationFrame(() => animateBounce(feed));
+    }
+
+    function flashHit(el) { el.classList.add('hit'); setTimeout(()=>el.classList.remove('hit'),120); }
+
+    function playVoice(url, btn) {
+        const audio = new Audio(url);
+        audio.play();
+        if (navigator.vibrate) navigator.vibrate([15,10,15]);
+        const card = btn.closest('.bubble-card,.star-card,.bounce-card');
+        if (card) {
+            card.style.boxShadow = '0 0 20px #ff2d55';
+            card.style.borderColor = '#ff2d55';
+            audio.onended = () => { card.style.boxShadow=''; card.style.borderColor=''; };
+        }
+    }
+
+    // ===== RECORD =====
+    let mediaRecorder, audioChunks=[], recTimer, recSec=0, recLimit=0;
+    let currentFX='normal', selectedType='おはよう';
+
+    function setFX(el, fx) {
+        document.querySelectorAll('.fx-chip').forEach(c=>c.classList.remove('active'));
+        el.classList.add('active'); currentFX=fx;
+    }
+    function selectType(el) {
+        document.querySelectorAll('.type-chip').forEach(c=>c.classList.remove('selected'));
+        el.classList.add('selected'); selectedType=el.textContent;
+    }
+
+    async function startRec(e) {
+        if (e) e.preventDefault();
+        const mic=document.getElementById('mic-outer');
+        const lw=document.getElementById('live-wave');
+        const timer=document.getElementById('rec-timer');
+        const limit=document.getElementById('rec-limit');
+        mic.classList.add('recording'); lw.classList.add('show');
+        recLimit=Math.floor(Math.random()*50)+10;
+        recSec=0; timer.textContent='00:00'; limit.textContent=`制限: ${recLimit}秒`;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+            mediaRecorder = new MediaRecorder(stream);
+            audioChunks=[];
+            mediaRecorder.ondataavailable = e=>audioChunks.push(e.data);
+            mediaRecorder.onstop = ()=>{ window.latestBlob=new Blob(audioChunks,{type:'audio/webm'}); };
+            mediaRecorder.start();
+            recTimer = setInterval(()=>{
+                recSec++;
+                timer.textContent=`00:${recSec<10?'0'+recSec:recSec}`;
+                if(recSec>=recLimit) stopRec();
+            },1000);
+        } catch(err) {
+            alert('マイクを許可してください');
+            mic.classList.remove('recording'); lw.classList.remove('show');
+        }
+    }
+
+    function stopRec() {
+        if(mediaRecorder&&mediaRecorder.state==='recording') mediaRecorder.stop();
+        clearInterval(recTimer);
+        document.getElementById('mic-outer').classList.remove('recording');
+        document.getElementById('live-wave').classList.remove('show');
+        document.getElementById('mic-outer').style.display='none';
+        document.getElementById('rec-copy').textContent='録音完了！';
+        document.getElementById('rec-limit').textContent='';
+        document.getElementById('post-area').style.display='flex';
+    }
+
+    function resetRec() {
+        document.getElementById('mic-outer').style.display='flex';
+        document.getElementById('post-area').style.display='none';
+        document.getElementById('rec-copy').textContent='今この瞬間の\n声を届けよう';
+        document.getElementById('rec-timer').textContent='';
+        document.getElementById('rec-limit').textContent='長押しで録音';
+        window.latestBlob=null;
+    }
+
+    async function postVoice() {
+        if(!window.latestBlob){alert('録音してください');return;}
+
+        // アカウント情報の取得
+        const { data: { user } } = await sb.auth.getUser();
+        if (!user) { alert('ログインしてください'); return; }
+
+        const btn=document.querySelector('.post-action-btn');
+        btn.textContent='投稿中...'; btn.disabled=true;
+
+        // ファイル名にユーザーIDを混ぜる
+        const fileName=`voice_${user.id}_${Date.now()}.webm`;
+
+        try {
+            const {error:upErr}=await sb.storage.from(BUCKET).upload(fileName,window.latestBlob,{contentType:'audio/web,'});
+            if(upErr) throw upErr;
+
+            // insertの中にuser_id:を追加
+            const {error:dbErr}=await sb.from(TABLE).insert([{
+                audio_url: fileName,
+                post_type: selectedType,
+                user_id: user.id
+            }]);
+            
+            if(dbErr) throw dbErr;
+            btn.textContent='投稿する'; btn.disabled=false;
+            resetRec();
+            showScreen('home',document.getElementById('nav-home'));
+        } catch(err) {
+            alert('エラー: '+err.message);
+            btn.textContent='投稿する'; btn.disabled=false;
+        }
+    }
+
+    // 夜限定エフェクト
+    function updateFXDisplay() {
+        const hour=new Date().getHours();
+        if((hour>=22||hour<5)&&!document.getElementById('fx-night')) {
+            const chip=document.createElement('div');
+            chip.id='fx-night'; chip.className='fx-chip';
+            chip.innerHTML='🌙 おやすみASMR';
+            chip.onclick=function(){setFX(this,'night');};
+            document.querySelector('.fx-row').appendChild(chip);
+        }
+    }
+
+    updateFXDisplay();
+    // splashをタップするまでauth-screenは非表示（splashが前面）
+    // splashタップ→closeSplash→checkAuth→ログイン済みならenterApp、未ログインならauth-screen表示
+
+    async function showMyQRCode() {
+        const { data: { user } } = await sb.auth.getUser();
+        if (!user) { alert('ログインが必要です'); return; }
+
+        //すでに表示されている場合は消す
+        const oldQr = document.getElementById('qr-modal');
+        if (oldQr) oldQr.remove();
+
+        // QRを表示する画面(モーダル)を作成
+        const modal = document.createElement('div');
+        modal.id = 'qr-modal';
+        modal.style = `
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.8); display: flex; flex-direction: column;
+        align-items: center; justify-content: center; z-index: 1000;
+        `;
+
+        modal.innerHTML = `
+        <div style="background: white; padding: 20px; border-radius: 15px; display: flex-direction: column; align-items: center;">
+            <div id="qrcode-canvas"></div>
+            <p style="color: black; margin-top: 15px; font-weight: bold;">あなたのフレンド用QR</p>
+            <button onclick="this.parentElement.parentElement.remove()" style="margin-top: 15px; padding: 10px 20px; background: #ff2d55; color: white; border: none; border-radius: 20px;">閉じる</button>
+            </div>
+            `;
+
+            document.body.appendChild(modal);
+
+            // QRコードを生成
+            new QRCode(document.getElementById("qrcode-canvas"), {
+                text: user.id,
+                width: 180,
+                height: 180,
+                colorDark : "#000000",
+                colorLight : "#ffffff"
+            });
+    }
+</script>
+</body>
+</html>
